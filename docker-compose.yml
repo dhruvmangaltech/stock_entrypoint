@@ -1,0 +1,235 @@
+version: "3.5"
+
+networks:
+  stockManagement:
+    name: stockManagement
+
+services:
+  nginx:
+    image: nginx:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - 81:80
+      - 8443:443
+
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - stockManagement
+  redis-database:
+    image: redis:5.0.7-alpine
+    volumes:
+      - ./docker_volumes_data/redis-database:/data
+    env_file: .env
+    ports:
+      - "8000:6379"
+    networks:
+      - stockManagement
+
+  database:
+    image: postgres:12.1
+    volumes:
+      - ./docker_volumes_data/database:/var/lib/postgresql/data
+    env_file: .env
+    ports:
+      - "8001:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    logging:
+      options:
+        max-size: "200k"
+        max-file: "10"
+    networks:
+      - stockManagement
+
+  admin-backend:
+    build:
+      context: ../admin-end/backend
+      target: builder
+    command: ["npm", "run", "start:dev"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - /home/node/app/node_modules/
+      - ../admin-end/backend:/home/node/app/
+    env_file: .env
+    ports:
+      - "8002:8080"
+      - "5630:9229"
+    depends_on:
+      - database
+    logging:
+      options:
+        max-size: "200k"
+        max-file: "10"
+    networks:
+       - stockManagement
+
+  admin-frontend:
+    build:
+      context: ../admin-end/frontend
+      target: builder
+    command: ["npm", "run", "start"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - /home/node/app/node_modules/
+      - ../admin-end/frontend:/home/node/app/
+    env_file: .env
+    ports:
+      - "8003:8080"
+      - "5631:9229"
+    depends_on:
+      - database
+    logging:
+      options:
+        max-size: "200k"
+        max-file: "10"
+    networks:
+      - stockManagement
+
+  # user-backend:
+  #   build:
+  #     context: ../player-end/backend
+  #     target: builder
+  #   command: ["npm", "run", "start:dev"]
+  #   volumes:
+  #     - /home/node/app/node_modules/
+  #     - ../player-end/backend:/home/node/app/
+  #   env_file: .env
+  #   ports:
+  #     - "8004:8080"
+  #     - "5632:9229"
+  #   depends_on:
+  #     - database
+  #   logging:
+  #     options:
+  #       max-size: "200k"
+  #       max-file: "10"
+  #   networks:
+  #     - stockManagement
+
+  # user-frontend:
+  #   build:
+  #     context: ../player-end/frontend
+  #     target: builder
+  #   command: ["yarn", "run", "dev"]
+  #   volumes:
+  #     - /home/node/app/node_modules/
+  #     - ../player-end/frontend:/home/node/app/
+  #   env_file: .env
+  #   ports:
+  #     - "8005:8080"
+  #     - "5633:9229"
+  #   depends_on:
+  #     - user-backend
+  #   logging:
+  #     options:
+  #       max-size: "200k"
+  #       max-file: "10"
+  #   networks:
+  #     - stockManagement
+
+  # queue-scheduler:
+  #   build:
+  #     context: ../cron-scheduler
+  #     target: builder
+  #   command: ["npm", "run", "start:dev"]
+  #   volumes:
+  #     - /home/node/app/node_modules/
+  #     - ../cron-scheduler:/home/node/app/
+  #   ports:
+  #     - "8007:8080"
+  #     - "5635:9229"
+  #   env_file: ../cron-scheduler/.env
+  #   depends_on:
+  #     - database
+  #   logging:
+  #     options:
+  #       max-size: "200k"
+  #       max-file: "10"
+  #   networks:
+  #     - stockManagement
+
+  # queue-worker:
+  #   build:
+  #     context: ../cron-scheduler
+  #     target: builder
+  #   command: ["npm", "run", "start:dev:workers"]
+  #   volumes:
+  #     - /home/node/app/node_modules/
+  #     - ../cron-scheduler:/home/node/app/
+  #   ports:
+  #     - "8008:8080"
+  #     - "5636:9229"
+  #   env_file: ../cron-scheduler/.env
+  #   depends_on:
+  #     - database
+  #   logging:
+  #     options:
+  #       max-size: "200k"
+  #       max-file: "10"
+  #   networks:
+  #     - stockManagement
+
+  pg-admin:
+    image: dpage/pgadmin4:4.18
+    #restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: postgres
+      PGADMIN_DEFAULT_PASSWORD: postgres
+      PGADMIN_LISTEN_PORT: 80
+    env_file: .env
+    ports:
+      - "8009:80"
+    volumes:
+      - ./docker_volumes_data/pgadmin-data:/var/lib/pgadmin
+    logging:
+      options:
+        max-size: "200k"
+        max-file: "10"
+    networks:
+      - stockManagement
+
+  redis-dashboard:
+    image: rediscommander/redis-commander:latest
+    restart: always
+    environment:
+      - REDIS_HOSTS=redis-database
+    env_file: .env
+    ports:
+      - "8010:8081"
+    networks:
+      - stockManagement
+
+  # laravel-app:
+    # build:
+    #   context: ../laravel
+    #   dockerfile: Dockerfile
+    # container_name: laravel_app
+    # volumes:
+    #   - ../laravel:/var/www
+    #   - ../laravel/.env:/var/www/.env
+    # environment:
+    #   APP_NAME: "Manual Verification Form"
+    #   APP_ENV: production
+    #   APP_KEY: base64:YourBase64KeyHere
+    #   APP_DEBUG: "false"
+    #   APP_URL: https://your_domain_or_ip
+    #   DB_CONNECTION: pgsql
+    #   DB_HOST: database
+    #   DB_PORT: 5432
+    #   DB_DATABASE: manual_form
+    #   DB_USERNAME: postgres
+    #   DB_PASSWORD: postgres
+    #   REDIS_HOST: redis-database
+    #   REDIS_PORT: 6379
+    # ports:
+    #   - "9000:9000"
+    # depends_on:
+    #   - database
+    #   - redis-database
+    # networks:
+    #   - stockManagement
